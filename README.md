@@ -8,9 +8,9 @@ It is governed by the global rules in **[berlin-ai-infra](https://github.com/yog
 
 ---
 
-# 🌧️ Micro-Catchment Retrofit Planner
+# 🌧️ Microcatchment Pro
 
-**AR web app for city staff to scan streets and visualize green infrastructure fixes for flood resilience.**
+**Professional site assessment tool for Civil Engineers. AR-powered micro-catchment analysis and automated hydrology reporting.**
 
 [![Railway](https://railway.app/button.svg)](https://railway.app/new/template)
 
@@ -24,7 +24,7 @@ It is governed by the global rules in **[berlin-ai-infra](https://github.com/yog
 │   [QR Code - Add your Railway   │
 │    URL here after deployment]   │
 │                                 │
-│   microcatchment-planner.up.    │
+│   microcatchment-pro.up.    │
 │   railway.app                   │
 │                                 │
 └─────────────────────────────────┘
