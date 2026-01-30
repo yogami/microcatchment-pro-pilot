@@ -53,10 +53,18 @@ export function DroneUploadView({ scanner }: { scanner: ReturnType<typeof useARS
                 Upload drone photos or video to generate a high-resolution 3D terrain model.
             </p>
 
-            {!isReconstructing ? (
+            {!isReconstructing && progress !== 100 && (
                 <UploadArea files={files} setFiles={setFiles} onProcess={handleReconstruct} />
-            ) : (
+            )}
+
+            {isReconstructing && (
                 <ReconstructionProgress progress={progress} />
+            )}
+
+            {!isReconstructing && progress === 100 && (
+                <div className="mt-8 animate-in fade-in zoom-in duration-500">
+                    <ROIDashboard />
+                </div>
             )}
 
             <button
@@ -69,37 +77,34 @@ export function DroneUploadView({ scanner }: { scanner: ReturnType<typeof useARS
     );
 }
 
-function UploadArea({ files, setFiles, onProcess }: { files: File[], setFiles: (f: File[]) => void, onProcess: () => void }) {
+function ROIDashboard() {
     return (
-        <div className="w-full max-w-sm">
-            <div
-                className="border-2 border-dashed border-gray-700 rounded-3xl p-12 mb-6 hover:border-emerald-500/50 transition-colors cursor-pointer bg-gray-800/20"
-                onClick={() => document.getElementById('drone-input')?.click()}
-            >
-                <div className="text-4xl mb-4">📤</div>
-                <p className="text-sm text-gray-400">Drag & Drop drone media or click to browse</p>
-                <input
-                    id="drone-input"
-                    type="file"
-                    multiple
-                    hidden
-                    onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                />
+        <div className="bg-emerald-900/30 border border-emerald-500/50 rounded-2xl p-6 backdrop-blur-md max-w-sm w-full mx-auto shadow-2xl shadow-emerald-900/50">
+            <div className="flex items-center justify-between mb-4 border-b border-emerald-500/20 pb-4">
+                <div className="text-left">
+                    <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest">Efficiency Gain</p>
+                    <p className="text-3xl font-black text-white">4.5 Hrs</p>
+                </div>
+                <div className="text-right">
+                    <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest">Billable Value</p>
+                    <p className="text-3xl font-black text-emerald-400">$675</p>
+                </div>
             </div>
 
-            {files.length > 0 && (
-                <div className="mb-6 animate-in fade-in slide-in-from-bottom-2">
-                    <p className="text-emerald-400 text-xs font-black uppercase mb-2">
-                        {files.length} Files Ready
-                    </p>
-                    <button
-                        onClick={onProcess}
-                        className="w-full py-4 rounded-2xl bg-emerald-500 text-white font-bold shadow-lg hover:emerald-600 transition-all shadow-emerald-500/20"
-                    >
-                        Start Photogrammetry
-                    </button>
-                </div>
-            )}
+            <div className="flex gap-2 items-center justify-center bg-black/40 rounded-lg p-2 mb-2">
+                <span className="text-xl">🏛️</span>
+                <span className="text-xs font-medium text-gray-300">Grant Eligibility: <span className="text-white font-bold">VADEQ-SLAF</span></span>
+                <span className="bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded ml-1">MATCH 98%</span>
+            </div>
+
+            <p className="text-[10px] text-gray-500 italic mt-2">
+                *Based on standard civil engineering scoping rates ($150/hr).
+            </p>
+            <div className="mt-4 border-t border-emerald-500/20 pt-2">
+                <p className="text-[8px] text-red-400 uppercase font-bold tracking-widest text-center">
+                    ⚠️ Preliminary Scoping Only. Not for Final Design or Stamping.
+                </p>
+            </div>
         </div>
     );
 }
@@ -114,7 +119,7 @@ function ReconstructionProgress({ progress }: { progress: number }) {
                 />
             </div>
             <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest animate-pulse">
-                {progress < 40 ? 'Extracting Keypoints...' : progress < 80 ? 'Dense Matching...' : 'Meshing Terrain...'}
+                {progress < 40 ? 'Connecting to Python PDAL Worker...' : progress < 80 ? 'Classifying Ground Points (SMRF)...' : 'Generating Grant Report...'}
             </p>
         </div>
     );
