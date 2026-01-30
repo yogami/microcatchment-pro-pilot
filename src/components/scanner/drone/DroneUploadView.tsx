@@ -124,3 +124,58 @@ function ReconstructionProgress({ progress }: { progress: number }) {
         </div>
     );
 }
+
+interface UploadAreaProps {
+    files: File[];
+    setFiles: (files: File[]) => void;
+    onProcess: () => void;
+}
+
+function UploadArea({ files, setFiles, onProcess }: UploadAreaProps) {
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        const droppedFiles = Array.from(e.dataTransfer.files);
+        setFiles([...files, ...droppedFiles]);
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setFiles([...files, ...Array.from(e.target.files)]);
+        }
+    };
+
+    return (
+        <div
+            className="border-2 border-dashed border-gray-600 rounded-2xl p-8 w-full max-w-sm hover:border-emerald-500/50 transition-colors cursor-pointer"
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+        >
+            <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={handleChange}
+                className="hidden"
+                id="drone-upload"
+            />
+            <label htmlFor="drone-upload" className="cursor-pointer">
+                <div className="flex flex-col items-center gap-3">
+                    <span className="text-4xl">📷</span>
+                    {files.length === 0 ? (
+                        <p className="text-gray-400 text-sm">Drop drone photos/video or click to browse</p>
+                    ) : (
+                        <p className="text-emerald-400 text-sm font-medium">{files.length} file(s) selected</p>
+                    )}
+                </div>
+            </label>
+            {files.length > 0 && (
+                <button
+                    onClick={onProcess}
+                    className="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors"
+                >
+                    🚀 Start 3D Reconstruction
+                </button>
+            )}
+        </div>
+    );
+}
