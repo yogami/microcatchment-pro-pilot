@@ -90,7 +90,7 @@ function ScannerBody({ scanner }: { scanner: ScannerHook }) {
                         onBoundaryConfirmed={handleBoundaryConfirmed}
                         onCancel={handleCancelPlanning}
                         minVertices={4}
-                        maxVertices={8}
+                        maxVertices={50}
                     />
                 </div>
             );

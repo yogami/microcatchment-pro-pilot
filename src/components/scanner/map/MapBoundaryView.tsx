@@ -30,7 +30,7 @@ if (MAPBOX_TOKEN) {
  */
 export function MapBoundaryView({
     minVertices = 3,
-    maxVertices = 10,
+    maxVertices = 50,
     onBoundaryConfirmed,
     onCancel
 }: MapBoundaryViewProps) {
