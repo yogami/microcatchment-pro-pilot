@@ -87,7 +87,7 @@ export function MapBoundaryView({
                     accessToken: MAPBOX_TOKEN,
                     style: 'mapbox://styles/mapbox/satellite-v9',
                     center: [Number(initLon), Number(initLat)],
-                    zoom: 20, // INCREASED ZOOM for precision
+                    zoom: 19, // Adjusted to 19 for optimal crispness/resolution balance
                     pitch: 0,
                     antialias: true,
                     trackResize: true,
@@ -203,13 +203,20 @@ export function MapBoundaryView({
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
 
-        vertices.forEach((v) => {
+        vertices.forEach((v, index) => {
             const el = document.createElement('div');
-            el.className = `w-3 h-3 rounded-full border border-white/80 shadow-2xl transition-all duration-300 flex items-center justify-center ${isTooFar ? 'bg-amber-500 scale-125' : 'bg-emerald-500'
+            el.className = `w-4 h-4 rounded-full border-2 border-white shadow-2xl transition-all duration-300 flex items-center justify-center cursor-pointer hover:scale-125 hover:bg-red-500 active:scale-95 ${isTooFar ? 'bg-amber-500' : 'bg-emerald-500'
                 }`;
             const core = document.createElement('div');
-            core.className = 'w-1 h-1 bg-white rounded-full';
+            core.className = 'w-1.5 h-1.5 bg-white rounded-full';
             el.appendChild(core);
+
+            // Tap to delete this specific point
+            el.addEventListener('click', (e) => {
+                e.stopPropagation(); // Don't trigger map click
+                setVertices(prev => prev.filter((_, i) => i !== index));
+                if (navigator.vibrate) navigator.vibrate([10, 5, 10]);
+            });
 
             const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
                 .setLngLat([v.lon, v.lat])
@@ -532,7 +539,7 @@ function MapControls({ canUndo, canClear, canConfirm, onUndo, onClear, onConfirm
             <button onClick={onConfirm} className={`w-full py-5 rounded-2xl font-black text-lg uppercase tracking-[0.2em] shadow-2xl transition-all duration-300 ${canConfirm ? 'bg-emerald-500 text-black shadow-emerald-500/40' : 'bg-gray-800 text-gray-500 opacity-50 pointer-events-none'}`} data-testid="confirm-boundary-button">Lock Site Geometry ✓</button>
             <div className="grid grid-cols-3 gap-2">
                 <button onClick={onCancel} className="bg-white/5 py-3 text-white border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest">Cancel</button>
-                <button onClick={onUndo} disabled={!canUndo} className="bg-white/5 py-3 text-white border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest disabled:opacity-20">Undo</button>
+                <button onClick={onUndo} disabled={!canUndo} className="bg-white/5 py-3 text-white border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest disabled:opacity-20">Delete Last</button>
                 <button onClick={onClear} disabled={!canClear} className="bg-red-500/10 py-3 text-red-500 border border-red-500/10 rounded-xl text-[9px] font-black uppercase tracking-widest disabled:opacity-20">Clear</button>
             </div>
         </div>
