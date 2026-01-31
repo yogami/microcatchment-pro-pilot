@@ -115,9 +115,16 @@ export function WalkingCoverageOverlay({
         });
         ctx.shadowBlur = 0;
 
-        // Draw current position
+        // Draw current position (Clamped to Frame)
         if (currentPosition) {
-            const p = project(currentPosition.lat, currentPosition.lon);
+            const rawP = project(currentPosition.lat, currentPosition.lon);
+
+            // CLAMPING: Ensure dot is always visible within the box
+            const margin = 12;
+            const p = {
+                x: Math.max(margin, Math.min(size - margin, rawP.x)),
+                y: Math.max(margin, Math.min(size - margin, rawP.y))
+            };
 
             // Pulse effect for accuracy
             const time = Date.now() / 1000;
@@ -134,15 +141,32 @@ export function WalkingCoverageOverlay({
             ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
             ctx.fillStyle = isInsideBoundary ? '#10b981' : '#ef4444';
             ctx.fill();
+
+            // White ring for visibility
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             ctx.stroke();
+
+            // If clamped, draw a small pointer towards the actual off-canvas position
+            if (rawP.x < 0 || rawP.x > size || rawP.y < 0 || rawP.y > size) {
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                const angle = Math.atan2(rawP.y - p.y, rawP.x - p.x);
+                ctx.lineTo(p.x + Math.cos(angle) * 8, p.y + Math.sin(angle) * 8);
+                ctx.strokeStyle = '#ef4444';
+                ctx.stroke();
+            }
         }
 
-        // Frame
-        ctx.strokeStyle = isInsideBoundary ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+        // Frame (The "Red Square Box")
+        ctx.strokeStyle = isInsideBoundary ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.8)';
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, size - 4, size - 4);
+
+        if (!isInsideBoundary) {
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
+            ctx.fillRect(0, 0, size, size);
+        }
 
     }, [boundary, currentPosition, voxels, isInsideBoundary, gpsAccuracy, size]);
 

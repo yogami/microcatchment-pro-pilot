@@ -54,7 +54,13 @@ export function DroneUploadView({ scanner }: { scanner: ReturnType<typeof useARS
             </p>
 
             {!isReconstructing && progress !== 100 && (
-                <UploadArea files={files} setFiles={setFiles} onProcess={handleReconstruct} />
+                <>
+                    <UploadArea files={files} setFiles={setFiles} onProcess={handleReconstruct} />
+                    <SovereigntyToggle
+                        isActive={scanner.isSovereignMode}
+                        onToggle={(v) => scanner.update({ isSovereignMode: v })}
+                    />
+                </>
             )}
 
             {isReconstructing && (
@@ -72,6 +78,28 @@ export function DroneUploadView({ scanner }: { scanner: ReturnType<typeof useARS
                 className="mt-8 text-gray-500 text-xs font-bold uppercase tracking-widest hover:text-white transition-colors"
             >
                 ← Back to AR Scanner
+            </button>
+        </div>
+    );
+}
+
+function SovereigntyToggle({ isActive, onToggle }: { isActive: boolean, onToggle: (v: boolean) => void }) {
+    return (
+        <div className="mt-4 p-4 rounded-2xl bg-gray-800/40 border border-gray-700/50 max-w-sm w-full flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-500'}`}>
+                    <span className="text-sm">🛡️</span>
+                </div>
+                <div className="text-left">
+                    <p className="text-xs font-bold text-white uppercase tracking-tight">Data Sovereignty</p>
+                    <p className="text-[10px] text-gray-500">Local processing mode active</p>
+                </div>
+            </div>
+            <button
+                onClick={() => onToggle(!isActive)}
+                className={`w-12 h-6 rounded-full transition-colors relative ${isActive ? 'bg-emerald-500' : 'bg-gray-600'}`}
+            >
+                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isActive ? 'translate-x-6' : ''}`} />
             </button>
         </div>
     );

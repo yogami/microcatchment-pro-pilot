@@ -67,6 +67,8 @@ export interface ARScannerState {
     geoBoundary: GeoPolygon | null;
     elevationGrid: ElevationGrid | null;
     voxels: string[]; // Voxel keys for visualization
+    // Sovereignty / Privacy
+    isSovereignMode: boolean; // Opt-out of global data flywheel
 }
 
 export interface Services {
@@ -99,7 +101,8 @@ export function useARScanner() {
         optimizationResult: null, tapeValidation: null, validationError: null,
         depthMode: 'initializing', accuracyLabel: 'Initializing...',
         scanPhase: 'onboarding', geoBoundary: null, elevationGrid: null,
-        voxels: []
+        voxels: [],
+        isSovereignMode: true // Default to private until first pilot
     });
 
     const update = useCallback((u: Partial<ARScannerState>) => setState(s => ({ ...s, ...u })), []);

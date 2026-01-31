@@ -1,9 +1,9 @@
 /**
  * ScannerHUD - Tactical AR overlay corners and sweep
  */
-export function ScannerHUD({ color = 'emerald' }: { color?: 'emerald' | 'amber' }) {
-    const colorClass = color === 'emerald' ? 'border-emerald-500' : 'border-amber-500';
-    const accentClass = color === 'emerald' ? 'via-emerald-500' : 'via-amber-500';
+export function ScannerHUD({ color = 'emerald' }: { color?: 'emerald' | 'amber' | 'red' }) {
+    const colorClass = color === 'emerald' ? 'border-emerald-500' : color === 'amber' ? 'border-amber-500' : 'border-red-500';
+    const accentClass = color === 'emerald' ? 'via-emerald-500' : color === 'amber' ? 'via-amber-500' : 'via-red-500';
 
     return (
         <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">

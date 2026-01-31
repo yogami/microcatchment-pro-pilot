@@ -5,6 +5,9 @@ import { useGroundDetection } from '../../hooks/scanner/useGroundDetection';
 import { WalkingCoverageOverlay } from './coverage/WalkingCoverageOverlay';
 import { GeoPolygon } from '../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
 import { ScannerHUD } from './HUD/ScannerHUD';
+import { useNadirAlignment } from '../../hooks/scanner/useNadirAlignment';
+import { NadirSpiritLevel } from './ui/NadirSpiritLevel';
+import { AudioFeedbackService } from '../../services/AudioFeedbackService';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
 
@@ -27,10 +30,13 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
     const [wasInside, setWasInside] = useState(true);
     const [hasPlayedCompletion, setHasPlayedCompletion] = useState(false);
 
-    // GPS Walking Coverage with IMU fusion
-    const coverage = useGPSWalkingCoverage(scanner.geoBoundary, scanner.isScanning);
+    // Nadir alignment tracking
+    const nadir = useNadirAlignment(8); // 8-degree tolerance for handheld stability
 
-    // Ground detection - validates camera is pointing at ground
+    // GPS Walking Coverage with IMU fusion - GATED by Nadir alignment
+    const coverage = useGPSWalkingCoverage(scanner.geoBoundary, scanner.isScanning, nadir.isAligned);
+
+    // Ground detection - secondary validation
     const groundDetection = useGroundDetection();
 
     // Sync coverage data to scanner state
@@ -48,9 +54,11 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
         if (wasInside && !coverage.isInsideBoundary) {
             // Just crossed OUT of boundary
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            AudioFeedbackService.beep(110, 0.2, 'sine'); // Low buzz for exit
         } else if (!wasInside && coverage.isInsideBoundary) {
             // Just crossed BACK IN
             if (navigator.vibrate) navigator.vibrate(50);
+            AudioFeedbackService.beep(880, 0.1, 'sine'); // High chirp for entry
         }
         setWasInside(coverage.isInsideBoundary);
     }, [coverage.isInsideBoundary, wasInside]);
@@ -63,6 +71,19 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
             audioRef.current?.play().catch(() => { }); // Play sound if available
         }
     }, [coverage.coveragePercent, hasPlayedCompletion]);
+
+    // BEARING WARNINGS: Acoustic and Visual
+    useEffect(() => {
+        if (!scanner.isScanning) return;
+
+        if (!nadir.isAligned) {
+            // Intermittent warning beep
+            const interval = setInterval(() => {
+                AudioFeedbackService.beep(220, 0.05, 'triangle'); // Low warning beep
+            }, 800);
+            return () => clearInterval(interval);
+        }
+    }, [nadir.isAligned, scanner.isScanning]);
 
     // Start camera (visual only)
     useEffect(() => {
@@ -125,7 +146,7 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
             <div className="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(circle,transparent_40%,rgba(0,0,0,0.6)_100%)]" />
 
             {/* Tech HUD */}
-            <ScannerHUD />
+            <ScannerHUD color={!nadir.isAligned ? 'amber' : !coverage.isInsideBoundary ? 'red' : 'emerald'} />
 
             {/* Completion Audio */}
             <audio ref={audioRef} src="/sounds/complete.mp3" preload="auto" hidden />
@@ -154,8 +175,32 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                 </div>
             )}
 
-            {/* Ground Detection mandatory overlay */}
-            {!groundDetection.isPointingAtGround && (
+            {/* Nadir Mandatory Alignment Overlay */}
+            {!nadir.isAligned && scanner.isScanning && (
+                <div
+                    data-testid="nadir-alignment-overlay"
+                    className="absolute inset-0 z-[100] bg-red-950/40 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500"
+                >
+                    <div className="mb-10 scale-150">
+                        <NadirSpiritLevel
+                            deviationX={nadir.deviationX}
+                            deviationY={nadir.deviationY}
+                            isAligned={nadir.isAligned}
+                        />
+                    </div>
+                    <h3 className="text-white text-2xl font-black uppercase tracking-tight mb-2">Stability Loss</h3>
+                    <p className="text-amber-500 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                        Hold phone parallel to ground <br /> to resume capture.
+                    </p>
+                    <div className="mt-8 flex gap-2">
+                        <div className="w-2 h-2 bg-red-500 animate-pulse rounded-full" />
+                        <span className="text-red-500 text-[9px] font-black uppercase">Recording Paused</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Ground Detection mandatory overlay (Legacy fallback) */}
+            {nadir.isAligned && !groundDetection.isPointingAtGround && (
                 <div
                     data-testid="ground-detection-overlay"
                     className="absolute inset-0 z-[100] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500"
@@ -180,14 +225,25 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                             : 'bg-red-500 animate-ping'
                         }`} />
                     <p className="text-white text-[10px] font-black uppercase tracking-widest leading-tight">
-                        {!groundDetection.isPointingAtGround
-                            ? 'Awaiting Calibration'
-                            : coverage.coveragePercent >= 95
-                                ? 'TARGET REACHED'
-                                : coverage.isInsideBoundary
-                                    ? 'RECORDING COVERAGE'
-                                    : 'OUTSIDE BOUNDARY'}
+                        {!nadir.isAligned
+                            ? 'STABILITY ERROR'
+                            : !groundDetection.isPointingAtGround
+                                ? 'Awaiting Calibration'
+                                : coverage.coveragePercent >= 95
+                                    ? 'TARGET REACHED'
+                                    : coverage.isInsideBoundary
+                                        ? 'RECORDING COVERAGE'
+                                        : 'OUTSIDE BOUNDARY'}
                     </p>
+                    {nadir.isAligned && (
+                        <div className="ml-auto scale-50 -mr-4">
+                            <NadirSpiritLevel
+                                deviationX={nadir.deviationX}
+                                deviationY={nadir.deviationY}
+                                isAligned={nadir.isAligned}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 

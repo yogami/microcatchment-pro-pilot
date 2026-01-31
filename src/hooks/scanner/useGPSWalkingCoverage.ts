@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GeoPolygon } from '../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
+import { CoordinateTransform } from '../../lib/spatial-coverage/domain/services/CoordinateTransform';
 
 interface GPSPosition {
     lat: number;
@@ -10,8 +11,8 @@ interface GPSPosition {
 interface FusedPosition {
     x: number; // Local meters from origin
     y: number;
-    elevation: number; // From barometer
-    confidence: number; // 0-1 based on sensor quality
+    elevation: number;
+    confidence: number;
 }
 
 interface VoxelData {
@@ -21,7 +22,7 @@ interface VoxelData {
     worldX: number;
     worldY: number;
     elevation: number;
-    visitCount: number; // For heatmap intensity
+    visitCount: number;
 }
 
 interface VoxelGrid {
@@ -43,21 +44,13 @@ interface WalkingCoverageState {
     stepCount: number;
 }
 
-// Complementary filter weight for sensor fusion
 const GPS_WEIGHT = 0.7;
 const IMU_WEIGHT = 0.3;
 
-/**
- * useGPSWalkingCoverage - Enhanced GPS + IMU fusion for walking coverage.
- * 
- * Uses complementary filter:
- * - GPS for absolute position (corrects drift)
- * - IMU for relative motion (smooth between GPS updates)
- * - Barometer for elevation
- */
 export function useGPSWalkingCoverage(
     boundary: GeoPolygon | null,
-    isScanning: boolean
+    isScanning: boolean,
+    isAligned: boolean = true
 ) {
     const [state, setState] = useState<WalkingCoverageState>({
         isActive: false,
@@ -76,15 +69,19 @@ export function useGPSWalkingCoverage(
     const lastIMURef = useRef<{ x: number; y: number; timestamp: number } | null>(null);
     const stepDetectorRef = useRef<{ lastAccel: number; stepThreshold: number }>({ lastAccel: 0, stepThreshold: 1.2 });
 
-    // Calculate total voxels in boundary
+    // Use a ref for alignment to avoid restarting the watch effect constantly
+    const isAlignedRef = useRef(isAligned);
+    useEffect(() => {
+        isAlignedRef.current = isAligned;
+    }, [isAligned]);
+
     const calculateTotalVoxels = useCallback((poly: GeoPolygon, voxelSize: number): number => {
         const bounds = poly.getBounds();
-        const widthM = haversineDistance(bounds.minLat, bounds.minLon, bounds.minLat, bounds.maxLon);
-        const heightM = haversineDistance(bounds.minLat, bounds.minLon, bounds.maxLat, bounds.minLon);
-        return Math.ceil(widthM / voxelSize) * Math.ceil(heightM / voxelSize);
+        const origin = { lat: bounds.minLat, lon: bounds.minLon };
+        const pMax = CoordinateTransform.latLonToLocalMeters(origin, { lat: bounds.maxLat, lon: bounds.maxLon });
+        return Math.ceil(Math.abs(pMax.x) / voxelSize) * Math.ceil(Math.abs(pMax.y) / voxelSize);
     }, []);
 
-    // IMU motion handler
     useEffect(() => {
         if (!isScanning) return;
 
@@ -92,26 +89,23 @@ export function useGPSWalkingCoverage(
             const accel = event.accelerationIncludingGravity;
             if (!accel?.x || !accel?.y || !accel?.z) return;
 
-            // Step detection via acceleration peaks
             const totalAccel = Math.sqrt(accel.x ** 2 + accel.y ** 2 + accel.z ** 2);
             const detector = stepDetectorRef.current;
 
             if (totalAccel > detector.stepThreshold * 9.8 && detector.lastAccel < detector.stepThreshold * 9.8) {
                 setState(s => ({ ...s, stepCount: s.stepCount + 1 }));
-
-                // Trigger haptic on step (visual feedback that motion is detected)
                 if (navigator.vibrate) navigator.vibrate(10);
             }
             detector.lastAccel = totalAccel / 9.8;
 
-            // Update IMU delta for fusion
             const now = Date.now();
             if (lastIMURef.current) {
                 const dt = (now - lastIMURef.current.timestamp) / 1000;
-                // Integrate acceleration to get velocity delta (simplified)
-                const dx = accel.x * dt * 0.1; // Damped for noise reduction
-                const dy = accel.y * dt * 0.1;
-                lastIMURef.current = { x: lastIMURef.current.x + dx, y: lastIMURef.current.y + dy, timestamp: now };
+                lastIMURef.current = {
+                    x: lastIMURef.current.x + accel.x * dt * 0.1,
+                    y: lastIMURef.current.y + accel.y * dt * 0.1,
+                    timestamp: now
+                };
             } else {
                 lastIMURef.current = { x: 0, y: 0, timestamp: now };
             }
@@ -121,7 +115,6 @@ export function useGPSWalkingCoverage(
         return () => window.removeEventListener('devicemotion', handleMotion);
     }, [isScanning]);
 
-    // GPS tracking with fusion
     useEffect(() => {
         const poly = GeoPolygon.ensureInstance(boundary);
         if (!isScanning || !poly) {
@@ -133,15 +126,14 @@ export function useGPSWalkingCoverage(
         }
 
         const origin = poly.getCentroid();
-        const voxelSize = 0.5; // 50cm voxels for better precision
+        const voxelSize = 0.5;
         const totalVoxels = calculateTotalVoxels(poly, voxelSize);
 
         setState(s => ({
             ...s,
             isActive: true,
-            voxelGrid: { painted: new Map(), voxelSize, origin },
+            voxelGrid: { ...s.voxelGrid, painted: s.voxelGrid.painted || new Map(), voxelSize, origin },
             totalVoxels,
-            stepCount: 0
         }));
 
         watchIdRef.current = navigator.geolocation.watchPosition(
@@ -153,18 +145,13 @@ export function useGPSWalkingCoverage(
                 };
 
                 setState(s => {
-                    // Convert GPS to local meters
-                    const gpsLocal = gpsToLocalMeters(gpsPos, s.voxelGrid.origin);
-
-                    // Fuse with IMU if available
+                    const gpsLocal = CoordinateTransform.latLonToLocalMeters(s.voxelGrid.origin, gpsPos);
                     let fusedX = gpsLocal.x;
                     let fusedY = gpsLocal.y;
 
                     if (lastIMURef.current && s.fusedPosition) {
-                        // Complementary filter: GPS corrects, IMU smooths
                         fusedX = GPS_WEIGHT * gpsLocal.x + IMU_WEIGHT * (s.fusedPosition.x + lastIMURef.current.x);
                         fusedY = GPS_WEIGHT * gpsLocal.y + IMU_WEIGHT * (s.fusedPosition.y + lastIMURef.current.y);
-                        // Reset IMU accumulator after fusion
                         lastIMURef.current = { x: 0, y: 0, timestamp: Date.now() };
                     }
 
@@ -172,28 +159,30 @@ export function useGPSWalkingCoverage(
                         x: fusedX,
                         y: fusedY,
                         elevation: pos.coords.altitude || 0,
-                        confidence: Math.max(0, 1 - gpsPos.accuracy / 20) // 20m = 0 confidence
+                        confidence: Math.max(0, 1 - gpsPos.accuracy / 20)
                     };
 
                     const isInside = poly.containsPoint(gpsPos.lat, gpsPos.lon);
                     const newPainted = new Map(s.voxelGrid.painted);
 
-                    if (isInside) {
-                        // Paint voxel at fused position
+                    // RECORD ONLY IF INSIDE AND ALIGNED
+                    if (isInside && isAlignedRef.current) {
                         const vx = Math.floor(fusedX / s.voxelGrid.voxelSize);
                         const vy = Math.floor(fusedY / s.voxelGrid.voxelSize);
                         const voxelKey = `${vx},${vy}`;
 
-                        const existing = newPainted.get(voxelKey);
-                        newPainted.set(voxelKey, {
-                            key: voxelKey,
-                            gx: vx,
-                            gy: vy,
-                            worldX: vx * s.voxelGrid.voxelSize,
-                            worldY: vy * s.voxelGrid.voxelSize,
-                            elevation: fusedPosition.elevation,
-                            visitCount: (existing?.visitCount || 0) + 1
-                        });
+                        if (!newPainted.has(voxelKey)) {
+                            newPainted.set(voxelKey, {
+                                key: voxelKey, gx: vx, gy: vy,
+                                worldX: vx * s.voxelGrid.voxelSize,
+                                worldY: vy * s.voxelGrid.voxelSize,
+                                elevation: fusedPosition.elevation,
+                                visitCount: 1
+                            });
+                        } else {
+                            const v = newPainted.get(voxelKey)!;
+                            newPainted.set(voxelKey, { ...v, visitCount: v.visitCount + 1 });
+                        }
                     }
 
                     const paintedCount = newPainted.size;
@@ -211,8 +200,8 @@ export function useGPSWalkingCoverage(
                     };
                 });
             },
-            (error) => console.error('GPS error:', error),
-            { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
+            (error) => console.error('[useGPSWalkingCoverage] GPS error:', error),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
         );
 
         return () => {
@@ -236,25 +225,6 @@ export function useGPSWalkingCoverage(
     return {
         ...state,
         reset,
-        getVoxelArray: (): VoxelData[] => Array.from(state.voxelGrid.painted.values())
+        getVoxelArray: (): VoxelData[] => Array.from(state.voxelGrid.painted?.values() || [])
     };
-}
-
-// Helper: Convert GPS to local meters relative to origin
-function gpsToLocalMeters(pos: GPSPosition, origin: { lat: number; lon: number }): { x: number; y: number } {
-    const metersPerDegreeLat = 111320;
-    const metersPerDegreeLon = 111320 * Math.cos(origin.lat * Math.PI / 180);
-    return {
-        x: (pos.lon - origin.lon) * metersPerDegreeLon,
-        y: (pos.lat - origin.lat) * metersPerDegreeLat
-    };
-}
-
-// Helper: Haversine distance in meters
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

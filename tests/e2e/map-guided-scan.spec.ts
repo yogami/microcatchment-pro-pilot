@@ -239,20 +239,15 @@ test.describe('Map-Guided AR Scan Workflow', () => {
         const mapContainer = page.locator('[data-testid="map-boundary-view"]');
         const box = await mapContainer.boundingBox();
 
-        if (box) {
-            // Click 4 points to form a quadrilateral
-            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
-            await page.waitForTimeout(200);
-            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.3);
-            await page.waitForTimeout(200);
-            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.7);
-            await page.waitForTimeout(200);
-            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7);
-            await page.waitForTimeout(200);
-
-            // Should show nodes count in diagnostics
-            await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
+        // Add 4 points via the Add Point button
+        const addPointBtn = page.getByRole('button', { name: /Add Point/i });
+        for (let i = 0; i < 4; i++) {
+            await addPointBtn.click();
+            await page.waitForTimeout(100);
         }
+
+        // Should show nodes count in diagnostics
+        await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
     });
 
     // =====================================================
@@ -269,28 +264,23 @@ test.describe('Map-Guided AR Scan Workflow', () => {
         const mapContainer = page.locator('[data-testid="map-boundary-view"]');
         const box = await mapContainer.boundingBox();
 
-        if (box) {
-            // Click 4 points (minimum required)
-            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
-            await page.waitForTimeout(150);
-            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.3);
-            await page.waitForTimeout(150);
-            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.7);
-            await page.waitForTimeout(150);
-            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7);
-            await page.waitForTimeout(200);
-
-            // Should show nodes count in diagnostics
-            await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
-
-            // Confirm button should now be visible and enabled
-            const confirmBtn = page.getByTestId('confirm-boundary-button');
-            await expect(confirmBtn).toBeVisible({ timeout: 5000 });
-            await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
-
-            // Button should have the new text
-            await expect(page.getByText(/Lock Site Geometry/i)).toBeVisible();
+        // Add 4 points (minimum required)
+        const addPointBtn = page.getByRole('button', { name: /Add Point/i });
+        for (let i = 0; i < 4; i++) {
+            await addPointBtn.click();
+            await page.waitForTimeout(100);
         }
+
+        // Should show nodes count in diagnostics
+        await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
+
+        // Confirm button should now be visible and enabled
+        const confirmBtn = page.getByTestId('confirm-boundary-button');
+        await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+        await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
+
+        // Button should have the new text
+        await expect(page.getByText(/Lock Site Geometry/i)).toBeVisible();
     });
 
     // =====================================================
@@ -307,35 +297,31 @@ test.describe('Map-Guided AR Scan Workflow', () => {
         const mapContainer = page.locator('[data-testid="map-boundary-view"]');
         const box = await mapContainer.boundingBox();
 
-        if (box) {
-            // Draw quadrilateral
-            await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.25);
-            await page.waitForTimeout(150);
-            await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.25);
-            await page.waitForTimeout(150);
-            await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.75);
-            await page.waitForTimeout(150);
-            await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
-            await page.waitForTimeout(300);
-
-            // Click Lock Site Geometry
-            const confirmBtn = page.getByTestId('confirm-boundary-button');
-            await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
-            await confirmBtn.click();
-
-            // Should transition to AR scanning phase (two-screen workflow)
-            await expect(page.getByTestId('ar-coverage-view')).toBeVisible({ timeout: 10000 });
-
-            // Complete scanning (click stop/complete button)
-            const stopBtn = page.getByTestId('stop-scanning-button');
-            await expect(stopBtn).toBeVisible({ timeout: 5000 });
-            await stopBtn.click();
-
-            // Should transition to analysis phase
-            await expect(
-                page.getByRole('heading', { name: /Hydrology Mitigation Strategy/i })
-            ).toBeVisible({ timeout: 10000 });
+        // Draw quadrilateral (adding points at current center)
+        const addPointBtn = page.getByRole('button', { name: /Add Point/i });
+        for (let i = 0; i < 4; i++) {
+            await addPointBtn.click();
+            await page.waitForTimeout(100);
         }
+        await page.waitForTimeout(100);
+
+        // Click Lock Site Geometry
+        const confirmBtn = page.getByTestId('confirm-boundary-button');
+        await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
+        await confirmBtn.click();
+
+        // Should transition to AR scanning phase (two-screen workflow)
+        await expect(page.getByTestId('ar-coverage-view')).toBeVisible({ timeout: 10000 });
+
+        // Complete scanning (click stop/complete button)
+        const stopBtn = page.getByTestId('stop-scanning-button');
+        await expect(stopBtn).toBeVisible({ timeout: 5000 });
+        await stopBtn.click();
+
+        // Should transition to analysis phase
+        await expect(
+            page.getByRole('heading', { name: /Hydrology Mitigation Strategy/i })
+        ).toBeVisible({ timeout: 10000 });
     });
 
     // =====================================================
@@ -352,19 +338,16 @@ test.describe('Map-Guided AR Scan Workflow', () => {
         const mapContainer = page.locator('[data-testid="map-boundary-view"]');
         const box = await mapContainer.boundingBox();
 
-        if (box) {
-            // Add 4 vertices
-            for (let i = 0; i < 4; i++) {
-                const x = box.x + box.width * (0.3 + (i % 2) * 0.4);
-                const y = box.y + box.height * (0.3 + Math.floor(i / 2) * 0.4);
-                await page.mouse.click(x, y);
-                await page.waitForTimeout(200);
-            }
-
-            // Should show area calculation and node count in diagnostics
-            await expect(page.getByTestId("area-value")).toBeVisible({ timeout: 5000 });
-            await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
+        // Add 4 vertices
+        const addPointBtn = page.getByRole('button', { name: /Add Point/i });
+        for (let i = 0; i < 4; i++) {
+            await addPointBtn.click();
+            await page.waitForTimeout(100);
         }
+
+        // Should show area calculation and node count in diagnostics
+        await expect(page.getByTestId("area-value")).toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
     });
 });
 
