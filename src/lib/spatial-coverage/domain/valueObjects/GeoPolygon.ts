@@ -174,4 +174,40 @@ export class GeoPolygon {
     containsPoint(lat: number, lon: number): boolean {
         return this.contains(lat, lon);
     }
+
+    /**
+     * Finds the nearest point on the polygon perimeter to a given local coordinate.
+     */
+    getNearestPointOnEdge(point: { x: number; y: number }, origin: LatLon): { x: number; y: number } {
+        const localVertices = this.toLocalMeters(origin);
+        let minSideDist = Infinity;
+        let nearest: { x: number; y: number } = { x: 0, y: 0 };
+
+        for (let i = 0; i < localVertices.length; i++) {
+            const j = (i + 1) % localVertices.length;
+            const p1 = localVertices[i];
+            const p2 = localVertices[j];
+
+            // Project point onto segment p1-p2
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            if (dx === 0 && dy === 0) continue;
+
+            const t = ((point.x - p1.x) * dx + (point.y - p1.y) * dy) / (dx * dx + dy * dy);
+            const clampedT = Math.max(0, Math.min(1, t));
+
+            const proj = {
+                x: p1.x + clampedT * dx,
+                y: p1.y + clampedT * dy
+            };
+
+            const dist = Math.sqrt((point.x - proj.x) ** 2 + (point.y - proj.y) ** 2);
+            if (dist < minSideDist) {
+                minSideDist = dist;
+                nearest = proj;
+            }
+        }
+
+        return nearest;
+    }
 }

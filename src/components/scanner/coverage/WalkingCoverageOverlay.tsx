@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { GeoPolygon } from '../../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
+import { CoordinateTransform } from '../../../lib/spatial-coverage/domain/services/CoordinateTransform';
 
 interface VoxelData {
     worldX: number;
@@ -158,7 +159,7 @@ export function WalkingCoverageOverlay({
             }
         }
 
-        // Frame (The "Red Square Box")
+        // Draw Frame (The "Red Square Box")
         ctx.strokeStyle = isInsideBoundary ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.8)';
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, size - 4, size - 4);
@@ -167,6 +168,33 @@ export function WalkingCoverageOverlay({
             ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
             ctx.fillRect(0, 0, size, size);
         }
+
+        // DRAW PLANNED ANCHORS (Vertices from Screen 1)
+        const polyVertices = (boundary as any)._vertices || [];
+        polyVertices.forEach((v: any, i: number) => {
+            const pv = project(v.lat, v.lon);
+            const isNear = currentPosition &&
+                CoordinateTransform.haversineDistance(currentPosition, v) < 3;
+
+            // Anchor Spot
+            ctx.beginPath();
+            ctx.arc(pv.x, pv.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = isNear ? '#34d399' : '#fff';
+            ctx.fill();
+
+            // Marker ID
+            ctx.fillStyle = isNear ? '#34d399' : 'rgba(255,255,255,0.4)';
+            ctx.font = '8px Inter, sans-serif';
+            ctx.fillText((i + 1).toString(), pv.x + 6, pv.y + 3);
+
+            if (isNear) {
+                ctx.strokeStyle = '#34d399';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(pv.x, pv.y, 8, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        });
 
     }, [boundary, currentPosition, voxels, isInsideBoundary, gpsAccuracy, size]);
 
@@ -198,15 +226,28 @@ export function WalkingCoverageOverlay({
                     />
                 </div>
 
-                {/* Tactical Stats */}
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                    <div className="bg-white/5 rounded-xl p-2 border border-white/5">
-                        <div className="text-[8px] text-slate-500 uppercase font-bold mb-0.5">Precision</div>
-                        <div className="text-[11px] text-white font-mono">±{gpsAccuracy.toFixed(1)}m</div>
+                {/* Tactical Stats & Legend */}
+                <div className="flex flex-col gap-3 mt-4">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+                            <div className="text-[8px] text-slate-500 uppercase font-bold mb-0.5">Precision</div>
+                            <div className="text-[11px] text-white font-mono">±{gpsAccuracy.toFixed(1)}m</div>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+                            <div className="text-[8px] text-slate-500 uppercase font-bold mb-0.5">Locomotion</div>
+                            <div className="text-[11px] text-white font-mono">{stepCount} <span className="text-[8px] text-slate-500">STS</span></div>
+                        </div>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-2 border border-white/5">
-                        <div className="text-[8px] text-slate-500 uppercase font-bold mb-0.5">Locomotion</div>
-                        <div className="text-[11px] text-white font-mono">{stepCount} <span className="text-[8px] text-slate-500">STS</span></div>
+
+                    <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#FFE600] ring-4 ring-[#FFE600]/10" />
+                            <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Segment</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                            <span className="text-[8px] text-emerald-500 font-bold uppercase tracking-tight">Verified</span>
+                        </div>
                     </div>
                 </div>
 

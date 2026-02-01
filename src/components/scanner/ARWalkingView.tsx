@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { CoordinateTransform } from '../../lib/spatial-coverage/domain/services/CoordinateTransform';
 import { useARScanner } from '../../hooks/useARScanner';
 import { useGPSWalkingCoverage } from '../../hooks/scanner/useGPSWalkingCoverage';
 import { useGroundDetection } from '../../hooks/scanner/useGroundDetection';
@@ -34,7 +35,7 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
     const nadir = useNadirAlignment(8); // 8-degree tolerance for handheld stability
 
     // GPS Walking Coverage with IMU fusion - GATED by Nadir alignment
-    const coverage = useGPSWalkingCoverage(scanner.geoBoundary, scanner.isScanning, nadir.isAligned);
+    const coverage = useGPSWalkingCoverage(scanner.geoBoundary, scanner.isScanning, nadir.isAligned, videoRef);
 
     // Ground detection - secondary validation
     const groundDetection = useGroundDetection();
@@ -146,7 +147,7 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
             <div className="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(circle,transparent_40%,rgba(0,0,0,0.6)_100%)]" />
 
             {/* Tech HUD */}
-            <ScannerHUD color={!nadir.isAligned ? 'amber' : !coverage.isInsideBoundary ? 'red' : 'emerald'} />
+            <ScannerHUD color={coverage.veracityWarning ? 'amber' : !nadir.isAligned ? 'amber' : !coverage.isInsideBoundary ? 'red' : 'emerald'} />
 
             {/* Completion Audio */}
             <audio ref={audioRef} src="/sounds/complete.mp3" preload="auto" hidden />
@@ -217,33 +218,56 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
 
             {/* Smart Instructions with Ground Detection */}
             <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 w-[85%] max-w-md">
-                <div className="bg-black/40 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl flex items-center gap-4">
-                    <div className={`w-3 h-3 rounded-full ${!groundDetection.isPointingAtGround
-                        ? 'bg-amber-500 animate-ping'
-                        : coverage.isInsideBoundary
-                            ? 'bg-emerald-500 animate-pulse'
-                            : 'bg-red-500 animate-ping'
-                        }`} />
-                    <p className="text-white text-[10px] font-black uppercase tracking-widest leading-tight">
-                        {!nadir.isAligned
-                            ? 'STABILITY ERROR'
-                            : !groundDetection.isPointingAtGround
-                                ? 'Awaiting Calibration'
-                                : coverage.coveragePercent >= 95
-                                    ? 'TARGET REACHED'
-                                    : coverage.isInsideBoundary
-                                        ? 'RECORDING COVERAGE'
-                                        : 'OUTSIDE BOUNDARY'}
-                    </p>
-                    {nadir.isAligned && (
-                        <div className="ml-auto scale-50 -mr-4">
-                            <NadirSpiritLevel
-                                deviationX={nadir.deviationX}
-                                deviationY={nadir.deviationY}
-                                isAligned={nadir.isAligned}
-                            />
-                        </div>
-                    )}
+                <div className="flex flex-col gap-2">
+                    <div className="bg-black/40 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl flex items-center gap-4">
+                        <div className={`w-3 h-3 rounded-full ${!groundDetection.isPointingAtGround
+                            ? 'bg-amber-500 animate-ping'
+                            : coverage.isInsideBoundary
+                                ? 'bg-emerald-500 animate-pulse'
+                                : 'bg-red-500 animate-ping'
+                            }`} />
+                        <p className="text-white text-[10px] font-black uppercase tracking-widest leading-tight">
+                            {!nadir.isAligned
+                                ? 'STABILITY ERROR'
+                                : !groundDetection.isPointingAtGround
+                                    ? 'Awaiting Calibration'
+                                    : coverage.coveragePercent >= 95
+                                        ? 'TARGET REACHED'
+                                        : coverage.isInsideBoundary
+                                            ? 'RECORDING COVERAGE'
+                                            : 'OUTSIDE BOUNDARY'}
+                        </p>
+                        {nadir.isAligned && (
+                            <div className="ml-auto scale-50 -mr-4">
+                                <NadirSpiritLevel
+                                    deviationX={nadir.deviationX}
+                                    deviationY={nadir.deviationY}
+                                    isAligned={nadir.isAligned}
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Camera Anchor / Snap Logic */}
+                    {(() => {
+                        const vertices = (scanner.geoBoundary as any)?._vertices || [];
+                        const nearest = vertices.find((v: any) =>
+                            coverage.currentPosition && CoordinateTransform.haversineDistance(coverage.currentPosition, v) < 3
+                        );
+
+                        if (nearest && scanner.isScanning) {
+                            return (
+                                <button
+                                    onClick={() => (coverage as any).snapToAnchor(nearest.lat, nearest.lon)}
+                                    className="bg-emerald-500 text-black px-6 py-3 rounded-2xl font-black text-[11px] uppercase tracking-tighter flex items-center justify-center gap-2 shadow-2xl animate-in slide-in-from-top-4 duration-500 active:scale-95"
+                                >
+                                    <span className="text-sm">📍</span>
+                                    Snap to Corner Anchor
+                                </button>
+                            );
+                        }
+                        return null;
+                    })()}
                 </div>
             </div>
 
@@ -279,8 +303,10 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                     <span className="text-emerald-400 font-bold">STABLE</span>
                 </div>
                 <p className="text-gray-400">GPS ACC: <span className="text-white">±{coverage.gpsAccuracy.toFixed(1)}m</span></p>
-                <p className="text-gray-400">IMU SYNC: <span className="text-white">ACTIVE</span></p>
-                <p className="text-emerald-400 font-bold mt-1 uppercase">Sensing Area: {coverage.paintedVoxels} pts</p>
+                <p className="text-gray-400">IMU SYNC: <span className="text-white">{coverage.veracityWarning ? 'HALLUCINATING' : 'LOCKED'}</span></p>
+                <p className={`${coverage.veracityWarning ? 'text-amber-500' : 'text-emerald-400'} font-bold mt-1 uppercase`}>
+                    {coverage.veracityWarning ? 'VERACITY BREACH' : `Sensing Area: ${coverage.paintedVoxels} pts`}
+                </p>
             </div>
         </div>
     );
